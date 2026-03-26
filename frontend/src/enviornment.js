@@ -1,5 +1,5 @@
 let IS_PROD = true;
-const server =  "http://localhost:3000"
+const server =  IS_PROD? "https://video-conferencing-jzzx.onrender.com":"http://localhost:3000";
 
 
 export default server;
