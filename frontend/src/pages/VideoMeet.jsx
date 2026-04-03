@@ -19,7 +19,17 @@ var connections = {};
 
 const peerConfigConnections = {
     "iceServers": [
-        { "urls": "stun:stun.l.google.com:19302" }
+        { "urls": "stun:stun.l.google.com:19302" },
+        {
+            "urls": "turn:openrelay.metered.ca:80",
+            "username": "openrelayproject",
+            "credential": "openrelayproject"
+        },
+        {
+            "urls": "turn:openrelay.metered.ca:443",
+            "username": "openrelayproject",
+            "credential": "openrelayproject"
+        }
     ]
 }
 
@@ -88,45 +98,29 @@ let [audio, setAudio] = useState(true);
     }
 
     const getPermissions = async () => {
-        try {
-            const videoPermission = await navigator.mediaDevices.getUserMedia({ video: true });
-            if (videoPermission) {
-                setVideoAvailable(true);
-                console.log('Video permission granted');
-            } else {
-                setVideoAvailable(false);
-                console.log('Video permission denied');
-            }
-
-            const audioPermission = await navigator.mediaDevices.getUserMedia({ audio: true });
-            if (audioPermission) {
-                setAudioAvailable(true);
-                console.log('Audio permission granted');
-            } else {
-                setAudioAvailable(false);
-                console.log('Audio permission denied');
-            }
-
-            if (navigator.mediaDevices.getDisplayMedia) {
-                setScreenAvailable(true);
-            } else {
-                setScreenAvailable(false);
-            }
-
-            if (videoAvailable || audioAvailable) {
-                const userMediaStream = await navigator.mediaDevices.getUserMedia({ video: videoAvailable, audio: audioAvailable });
-                if (userMediaStream) {
-                    window.localStream = userMediaStream;
-                    if (localVideoref.current) {
-                        localVideoref.current.srcObject = userMediaStream;
-                    }
-                }
-            }
-        } catch (error) {
-            console.log(error);
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        setVideoAvailable(true);
+        setAudioAvailable(true);
+        setScreenAvailable(!!navigator.mediaDevices.getDisplayMedia);
+        window.localStream = stream;
+        if (localVideoref.current) {
+            localVideoref.current.srcObject = stream;
         }
-    };
-
+    } catch (error) {
+        // Try audio only if video fails (common on some mobile devices)
+        try {
+            const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setVideoAvailable(false);
+            setAudioAvailable(true);
+            window.localStream = audioStream;
+        } catch (e) {
+            setVideoAvailable(false);
+            setAudioAvailable(false);
+            console.log("No media permissions:", e);
+        }
+    }
+};
     // useEffect(() => {
     //     if (video !== undefined && audio !== undefined) {
     //         getUserMedia();
@@ -142,10 +136,14 @@ let [audio, setAudio] = useState(true);
     // }
     let getMedia = async () => {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: videoAvailable,
-            audio: audioAvailable
-        });
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+    video: video ? { 
+        facingMode: "user",
+        width: { ideal: 640 },
+        height: { ideal: 480 }
+    } : false, 
+    audio: audio 
+})
 
         window.localStream = stream;
         localVideoref.current.srcObject = stream;
@@ -298,8 +296,10 @@ let [audio, setAudio] = useState(true);
 
 
     let connectToSocketServer = () => {
-        socketRef.current = io.connect(server_url, { secure: false })
-
+socketRef.current = io.connect(server_url, { 
+    transports: ["websocket"],
+    upgrade: false
+})
         socketRef.current.on('signal', gotMessageFromServer)
 
         socketRef.current.on('connect', () => {
@@ -508,7 +508,7 @@ let handleAudio = () => {
 
 
                     <div>
-                        <video ref={localVideoref} autoPlay muted></video>
+                        <video ref={localVideoref} autoPlay muted playsInline></video>
                     </div>
 
             </div>:<div className={styles.meetVideoContainer}>
@@ -562,18 +562,17 @@ let handleAudio = () => {
 
                     
                 </div>
-            <video className={styles.meetUserVideo} ref={localVideoref} autoPlay muted></video>
+            <video className={styles.meetUserVideo} ref={localVideoref} autoPlay muted playsInline></video>
 
             {videos.map((video)=>(
                 <div className={styles.conferenceView} key={video.socketId}>
                     
 
-                    <video data-socket={video.socketId}
-                    ref={ref=>{
-                        if(ref&&video.stream){
+                    <video data-socket={video.socketId} ref={ref => {
+                         if (ref && video.stream) {
                             ref.srcObject = video.stream;
-                        }
-                    }} autoPlay></video>
+                          }
+                          }} autoPlay playsInline></video>
                 </div>
 
             ))}
